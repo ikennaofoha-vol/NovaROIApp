@@ -70,7 +70,11 @@
             Cat_Global_Title: "Global Parameters",
             Cat_Outsourced_Title: "Outsourced Parameters",
             Cat_InHouse_Title: "In-House Parameters",
-            Cat_NOVA_Title: "NOVA Parameters"
+            Cat_NOVA_Title: "NOVA Parameters",
+            Cat_Global_Icon: "fa-globe",
+            Cat_Outsourced_Icon: "fa-truck-fast",
+            Cat_InHouse_Icon: "fa-industry",
+            Cat_NOVA_Icon: "fa-microchip"
         };
 
         const DEFAULT_INPUTS = [
@@ -230,14 +234,19 @@
                             const catInputs = inputs.filter(i => i.category === cat);
                             if (catInputs.length === 0) return null;
                             
-                            // Dynamic Title Fetching from Config
-                            const configKey = `Cat_${cat}_Title`;
-                            const displayTitle = config[configKey] || `${cat} Parameters`;
+                            // Dynamic Title & Icon Fetching from Config
+                            const titleKey = `Cat_${cat}_Title`;
+                            const iconKey = `Cat_${cat}_Icon`;
+                            
+                            const displayTitle = config[titleKey] || `${cat} Parameters`;
+                            const iconClass = config[iconKey];
                             
                             return (
                                 <div key={cat} className="bg-surface-panel rounded-lg shadow-lg border border-slate-700/50 overflow-hidden transition-all duration-300 ease-in-out hover:border-slate-600">
                                     <div className="bg-surface-raised/50 px-5 py-3 border-b border-slate-700/50 font-semibold text-slate-200 flex items-center">
-                                        {cat === "NOVA" ? <i className="fa-solid fa-microchip text-primary-500 mr-2"></i> : null}
+                                        {iconClass && iconClass.trim() !== "" ? (
+                                            <i className={`fa-solid ${iconClass} mr-2 ${cat === 'NOVA' ? 'text-primary-500' : 'text-slate-400'}`}></i>
+                                        ) : null}
                                         {displayTitle}
                                     </div>
                                     <div className="p-5 space-y-4">
@@ -279,7 +288,6 @@
 
                     const ctx = chartRef.current.getContext('2d');
                     
-                    // Chart configured for Dark Mode
                     chartInstance.current = new Chart(ctx, {
                         type: 'bar',
                         data: {
@@ -288,19 +296,19 @@
                                 {
                                     label: 'Cycle Cost (OpEx)',
                                     data: [calc.outsource_cycle_cost, calc.inhouse_cycle_cost, calc.nova_cycle_cost],
-                                    backgroundColor: ['#475569', '#64748b', '#3b82f6'], // Slate 600, Slate 500, Primary 500
+                                    backgroundColor: ['#475569', '#64748b', '#3b82f6'], 
                                     borderRadius: 4,
                                 },
                                 {
                                     label: 'Equipment (CapEx)',
                                     data: [calc.outsource_capex, calc.inhouse_capex - calc.inhouse_facility_capex, calc.nova_capex],
-                                    backgroundColor: ['#1e293b', '#334155', '#1e3a8a'], // Slate 800, Slate 700, Primary 900
+                                    backgroundColor: ['#1e293b', '#334155', '#1e3a8a'], 
                                     borderRadius: 4,
                                 },
                                 {
                                     label: 'Facility Upgrades (CapEx)',
                                     data: [0, calc.inhouse_facility_capex, 0],
-                                    backgroundColor: ['#0f172a', '#1e293b', '#172554'], // Slate 900, Slate 800, Primary 950
+                                    backgroundColor: ['#0f172a', '#1e293b', '#172554'], 
                                     borderRadius: 4,
                                 }
                             ]
@@ -317,7 +325,7 @@
                                 y: { 
                                     stacked: true, 
                                     border: { display: false },
-                                    grid: { color: '#334155' }, // Dark grid lines
+                                    grid: { color: '#334155' }, 
                                     ticks: { 
                                         color: '#94a3b8', 
                                         font: { family: 'Inter' },
