@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voltera ROI Visualizer</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        voltera: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6', // Primary NOVA Teal
+                            600: '#0d9488',
+                            900: '#134e4a',
+                        },
+                        surface: {
+                            light: '#ffffff',
+                            dark: '#0f172a' // Slate 900
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- DEFAULTS (Fallback if Google Sheet API fails or is empty) ---
+        const DEFAULT_CONFIG = {
+            App_Title: "Voltera Print vs. Outsource ROI",
+            App_Subtitle: "Discover your break-even point and time-to-market advantage.",
+            Tab1_Name: "1. Inputs & Assumptions",
+            Tab2_Name: "2. ROI Visualizer",
+            Feature_Speed: "Added Revenue from Early Launch",
+            Feature_Payback: "Time-Based Payback Period",
+            Feature_Space: "Hidden Facility Costs"
+        };
+
+        const DEFAULT_INPUTS = [
+            { category: "Global", variable: "labor_rate", display: "Hourly Labor Cost", value: 50, unit: "$/hr", tooltip: "Median hourly rate for engineers." },
+            { category: "Global", variable: "iterations_per_cycle", display: "Iterations per Design Cycle", value: 10, unit: "iterations", tooltip: "Number of revisions per final product." },
+            { category: "Global", variable: "cycles_per_year", display: "Average Design Cycles per Year", value: 4, unit: "cycles", tooltip: "Used to calculate time-based payback." },
+            { category: "Global", variable: "expected_revenue", display: "Expected Monthly Revenue", value: 50000, unit: "$/mo", tooltip: "Revenue expected once the product launches." },
+            { category: "Outsourced", variable: "out_lead_time", display: "Lead Time per Iteration", value: 2, unit: "weeks", tooltip: "Average time to receive outsourced boards." },
+            { category: "Outsourced", variable: "out_tooling", display: "Setup / Tooling per Iteration", value: 150, unit: "$", tooltip: "NRE, setup, and file prep costs." },
+            { category: "Outsourced", variable: "out_material", display: "Material Cost per Print", value: 35, unit: "$", tooltip: "Ink, dielectric, and substrate stack." },
+            { category: "InHouse", variable: "in_space", display: "Required Floor Space", value: 100, unit: "sq ft", tooltip: "Space for screen printer, wash station, oven." },
+            { category: "InHouse", variable: "in_space_cost", display: "Cost per Sq Ft", value: 25, unit: "$/sq ft", tooltip: "Average industrial/commercial lease cost." },
+            { category: "InHouse", variable: "in_facility", display: "Facility Upgrades", value: 2500, unit: "$", tooltip: "Ventilation, plumbing, safety gear." },
+            { category: "InHouse", variable: "in_equipment", display: "Screen Printer CapEx", value: 4816, unit: "$", tooltip: "Cost of printer, oven, and fridge." },
+            { category: "InHouse", variable: "in_stencil", display: "Stencil Cost per Iteration", value: 109, unit: "$", tooltip: "Cost of new screens for each design change." },
+            { category: "NOVA", variable: "nova_equipment", display: "NOVA Upfront CapEx", value: 46789, unit: "$", tooltip: "Machine, oven, fridge." },
+            { category: "NOVA", variable: "nova_lead_time", display: "Lead Time per Iteration", value: 0.2, unit: "weeks", tooltip: "~1 business day for in-house printing." }
+        ];
+
+        const API_URL = "https://script.google.com/macros/s/AKfycbwq01hXUdTzOzU3Ck-2zy4-7Hj9_TzISmTnRIj1x8KoPacfP8yiA0-i-elJKFtQeX9K/exec";
+
+        // --- COMPONENTS ---
+
+        const Tooltip = ({ text }) => (
+            <div className="group relative inline-flex items-center justify-center ml-2">
+                <i className="ph ph-info text-slate-400 hover:text-slate-600 cursor-help transition-colors"></i>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg text-center">
+                    {text}
+                    <svg className="absolute text-slate-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
+                </div>
+            </div>
+        );
+
+        function App() {
+            const [config, setConfig] = useState(DEFAULT_CONFIG);
+            const [inputs, setInputs] = useState(DEFAULT_INPUTS);
+            const [inputValues, setInputValues] = useState({});
+            const [activeTab, setActiveTab] = useState('inputs');
+            const [isLoading, setIsLoading] = useState(true);
+            const [hasLogged, setHasLogged] = useState(false);
+
+            // Fetch data from Google Sheet
+            useEffect(() => {
+                const fetchData = async () => {
+                    try {
+                        const response = await fetch(API_URL);
+                        const data = await response.json();
+                        
+                        if (data.config && Object.keys(data.config).length > 0) {
+                            setConfig(prev => ({...prev, ...data.config}));
+                        }
+                        if (data.inputs && data.inputs.length > 0) {
+                            setInputs(data.inputs);
+                        }
+                    } catch (error) {
+                        console.error("Failed to fetch from Google Sheets, using defaults.", error);
+                    } finally {
+                        setIsLoading(false);
+                    }
+                };
+                fetchData();
+            }, []);
+
+            // Initialize input values state
+            useEffect(() => {
+                const initialValues = {};
+                inputs.forEach(inp => {
+                    initialValues[inp.variable] = parseFloat(inp.value) || 0;
+                });
+                setInputValues(initialValues);
+            }, [inputs]);
+
+            const handleInputChange = (variable, value) => {
+                setInputValues(prev => ({
+                    ...prev,
+                    [variable]: parseFloat(value) || 0
+                }));
+            };
+
+            // --- CALCULATIONS ---
+            const calc = useMemo(() => {
+                const v = (key) => inputValues[key] || 0;
+                
+                const iterations = v('iterations_per_cycle');
+                const labor = v('labor_rate');
+                
+                // Outsourced
+                const outsource_nre = 500; // Assumed fixed NRE
+                const outsource_iter_cost = v('out_tooling') + v('out_material') + labor; // Simplified labor
+                const outsource_cycle_cost = (outsource_iter_cost * iterations) + outsource_nre;
+                const outsource_capex = 0;
+
+                // In-House Partial
+                const inhouse_facility_capex = v('in_facility') + (v('in_space') * v('in_space_cost'));
+                const inhouse_capex = v('in_equipment') + inhouse_facility_capex;
+                const inhouse_iter_cost = v('in_stencil') + 20 + labor; // $20 mat assumption
+                const inhouse_cycle_cost = inhouse_iter_cost * iterations;
+
+                // NOVA
+                const nova_capex = v('nova_equipment');
+                const nova_iter_cost = 10 + (labor * 0.5); // $10 mat, half labor time
+                const nova_cycle_cost = nova_iter_cost * iterations;
+
+                // Break Evens
+                const be_outsource_cycles = (nova_capex - outsource_capex) / Math.max((outsource_cycle_cost - nova_cycle_cost), 1);
+                const be_inhouse_cycles = (nova_capex - inhouse_capex) / Math.max((inhouse_cycle_cost - nova_cycle_cost), 1);
+
+                // Payback
+                const payback_months = (be_outsource_cycles / Math.max(v('cycles_per_year'), 1)) * 12;
+
+                // Time to Market
+                const weeks_saved = (v('out_lead_time') - v('nova_lead_time')) * iterations;
+                const added_revenue = (weeks_saved / 4.33) * v('expected_revenue');
+
+                return {
+                    outsource_cycle_cost, outsource_capex,
+                    inhouse_cycle_cost, inhouse_capex, inhouse_facility_capex,
+                    nova_cycle_cost, nova_capex,
+                    be_outsource_cycles, be_inhouse_cycles,
+                    payback_months, weeks_saved, added_revenue
+                };
+            }, [inputValues]);
+
+            // --- LOGGING ---
+            useEffect(() => {
+                if (activeTab === 'roi' && !hasLogged && !isLoading) {
+                    setHasLogged(true);
+                    try {
+                        fetch(API_URL, {
+                            method: 'POST',
+                            mode: 'no-cors', // Required for simple POST to Apps Script without preflight issues
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                session_id: "Sales_App_" + Math.floor(Math.random()*10000),
+                                outsource_cost: calc.outsource_cycle_cost,
+                                inhouse_cost: calc.inhouse_cycle_cost,
+                                nova_cost: calc.nova_cycle_cost,
+                                payback_months: calc.payback_months
+                            })
+                        });
+                    } catch(e) { console.error("Logging failed", e); }
+                }
+            }, [activeTab, hasLogged, isLoading, calc]);
+
+
+            // --- RENDER HELPERS ---
+            const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(val);
+            const formatNumber = (val) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(val);
+
+            // --- UI COMPONENTS ---
+            const renderInputs = () => {
+                const categories = ["Global", "Outsourced", "InHouse", "NOVA"];
+                
+                return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 animate-fade-in">
+                        {categories.map(cat => {
+                            const catInputs = inputs.filter(i => i.category === cat);
+                            if (catInputs.length === 0) return null;
+                            
+                            return (
+                                <div key={cat} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-700 flex items-center">
+                                        {cat === "NOVA" ? <i className="ph-fill ph-sparkle text-voltera-500 mr-2"></i> : null}
+                                        {cat} Parameters
+                                    </div>
+                                    <div className="p-5 space-y-4">
+                                        {catInputs.map(inp => (
+                                            <div key={inp.variable} className="flex flex-col">
+                                                <label className="text-sm font-medium text-slate-600 flex items-center mb-1">
+                                                    {inp.display}
+                                                    {inp.tooltip && <Tooltip text={inp.tooltip} />}
+                                                </label>
+                                                <div className="relative rounded-md shadow-sm">
+                                                    <input 
+                                                        type="number" 
+                                                        value={inputValues[inp.variable] || ''}
+                                                        onChange={(e) => handleInputChange(inp.variable, e.target.value)}
+                                                        className="form-input block w-full rounded-md border-slate-300 focus:border-voltera-500 focus:ring-voltera-500 sm:text-sm px-3 py-2 border outline-none transition-shadow"
+                                                    />
+                                                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                                        <span className="text-slate-400 sm:text-sm">{inp.unit}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            const ChartComponent = ({ calc }) => {
+                const chartRef = useRef(null);
+                const chartInstance = useRef(null);
+
+                useEffect(() => {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+
+                    const ctx = chartRef.current.getContext('2d');
+                    chartInstance.current = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: ['Outsourced CM', 'Partial In-House', 'NOVA'],
+                            datasets: [
+                                {
+                                    label: 'Cycle Cost (OpEx)',
+                                    data: [calc.outsource_cycle_cost, calc.inhouse_cycle_cost, calc.nova_cycle_cost],
+                                    backgroundColor: ['#94a3b8', '#64748b', '#14b8a6'],
+                                    borderRadius: 4,
+                                },
+                                {
+                                    label: 'Equipment (CapEx)',
+                                    data: [calc.outsource_capex, calc.inhouse_capex - calc.inhouse_facility_capex, calc.nova_capex],
+                                    backgroundColor: ['#e2e8f0', '#cbd5e1', '#ccfbf1'],
+                                    borderRadius: 4,
+                                },
+                                {
+                                    label: 'Facility Upgrades (CapEx)',
+                                    data: [0, calc.inhouse_facility_capex, 0],
+                                    backgroundColor: ['#f8fafc', '#f1f5f9', '#f0fdfa'],
+                                    borderRadius: 4,
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                x: { stacked: true, grid: { display: false } },
+                                y: { 
+                                    stacked: true, 
+                                    border: { display: false },
+                                    ticks: { callback: (value) => '$' + value.toLocaleString() }
+                                }
+                            },
+                            plugins: {
+                                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                                tooltip: {
+                                    callbacks: {
+                                        label: (context) => context.dataset.label + ': ' + formatCurrency(context.raw)
+                                    }
+                                }
+                            }
+                        }
+                    });
+
+                    return () => { if (chartInstance.current) chartInstance.current.destroy(); }
+                }, [calc]);
+
+                return <div className="h-72 w-full"><canvas ref={chartRef}></canvas></div>;
+            };
+
+            const renderROI = () => {
+                return (
+                    <div className="p-6 space-y-6 animate-fade-in">
+                        {/* Top Hero Metrics */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Payback Hero */}
+                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-voltera-500"></div>
+                                <h3 className="text-slate-500 font-medium text-sm uppercase tracking-wider mb-2">{config.Feature_Payback}</h3>
+                                <div className="text-5xl font-bold text-slate-800 mb-2">
+                                    {formatNumber(calc.payback_months)} <span className="text-2xl text-slate-400 font-normal">months</span>
+                                </div>
+                                <p className="text-sm text-slate-500 max-w-xs">
+                                    Based on {formatNumber(calc.be_outsource_cycles)} design cycles to break even against outsourcing.
+                                </p>
+                            </div>
+
+                            {/* Value Hero */}
+                            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col justify-center items-center text-center text-white">
+                                <i className="ph ph-rocket-launch text-3xl text-voltera-500 mb-2"></i>
+                                <h3 className="text-slate-300 font-medium text-sm uppercase tracking-wider mb-2">{config.Feature_Speed}</h3>
+                                <div className="text-4xl font-bold text-emerald-400 mb-2 drop-shadow-md">
+                                    +{formatCurrency(calc.added_revenue)}
+                                </div>
+                                <p className="text-sm text-slate-400 max-w-xs">
+                                    Generated by launching {formatNumber(calc.weeks_saved)} weeks earlier per design cycle.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Chart Area */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                            <div className="flex justify-between items-end mb-6">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800">Cost Structure Comparison</h3>
+                                    <p className="text-sm text-slate-500">CapEx vs OpEx over a single {inputValues.iterations_per_cycle}-iteration cycle.</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs text-slate-400 uppercase tracking-wide">NOVA Cycle Savings</div>
+                                    <div className="text-xl font-bold text-voltera-600">{formatCurrency(calc.outsource_cycle_cost - calc.nova_cycle_cost)}</div>
+                                </div>
+                            </div>
+                            <ChartComponent calc={calc} />
+                        </div>
+
+                        {/* Sensitivity Matrix */}
+                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+                                <h3 className="text-lg font-semibold text-slate-800">Sensitivity Analysis: Break-Even Cycles</h3>
+                                <p className="text-sm text-slate-500">How many cycles to pay off NOVA if assumptions change?</p>
+                            </div>
+                            <div className="overflow-x-auto p-6">
+                                <table className="w-full text-sm text-left">
+                                    <thead>
+                                        <tr>
+                                            <th className="pb-3 text-slate-500 font-medium">Outsource Iteration Cost &rarr;<br/>Iterations per Cycle &darr;</th>
+                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$100 / iter</th>
+                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$250 / iter</th>
+                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200 text-voltera-600 bg-voltera-50 rounded-t-md">Current (~${Math.round((calc.outsource_cycle_cost-500)/inputValues.iterations_per_cycle)})</th>
+                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$500 / iter</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {[3, 5, 10, 15].map((iters, idx) => (
+                                            <tr key={iters} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                                <td className="py-3 font-medium text-slate-700">{iters} iterations</td>
+                                                {[100, 250, (calc.outsource_cycle_cost-500)/inputValues.iterations_per_cycle, 500].map((cost, i) => {
+                                                    // Local calc for matrix
+                                                    const outCost = (cost * iters) + 500; 
+                                                    const novCost = 15 * iters; // fixed assume
+                                                    const be = calc.nova_capex / Math.max(outCost - novCost, 1);
+                                                    const isCurrent = i === 2;
+                                                    return (
+                                                        <td key={i} className={`py-3 text-center ${isCurrent ? 'bg-voltera-50 font-bold text-voltera-700' : 'text-slate-600'}`}>
+                                                            {formatNumber(be)} cycles
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            if (isLoading) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center">
+                        <div className="flex flex-col items-center space-y-4">
+                            <i className="ph ph-spinner-gap animate-spin text-4xl text-voltera-500"></i>
+                            <p className="text-slate-500 font-medium">Loading parameters...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                    {/* Header */}
+                    <div className="mb-8 text-center md:text-left flex flex-col md:flex-row md:justify-between md:items-end">
+                        <div>
+                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{config.App_Title}</h1>
+                            <p className="mt-2 text-slate-500">{config.App_Subtitle}</p>
+                        </div>
+                        <div className="mt-4 md:mt-0">
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Voltera_Logo.png" alt="Voltera Logo" className="h-8 opacity-80 grayscale mix-blend-multiply" onError={(e) => e.target.style.display='none'} />
+                        </div>
+                    </div>
+
+                    {/* Navigation Tabs */}
+                    <div className="border-b border-slate-200 mb-6">
+                        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                            <button
+                                onClick={() => setActiveTab('inputs')}
+                                className={`${activeTab === 'inputs' ? 'border-voltera-500 text-voltera-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+                            >
+                                <i className="ph ph-sliders text-lg mr-2"></i>
+                                {config.Tab1_Name}
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('roi')}
+                                className={`${activeTab === 'roi' ? 'border-voltera-500 text-voltera-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+                            >
+                                <i className="ph ph-chart-line-up text-lg mr-2"></i>
+                                {config.Tab2_Name}
+                            </button>
+                        </nav>
+                    </div>
+
+                    {/* Main Content Area */}
+                    <main className="min-h-[600px]">
+                        {activeTab === 'inputs' ? renderInputs() : renderROI()}
+                    </main>
+                    
+                    <footer className="mt-12 text-center text-sm text-slate-400 pb-8">
+                        &copy; {new Date().getFullYear()} Voltera. Internal Sales Tool.
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+
+    <style>
+        /* Custom Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+        
+        /* Hide number input arrows */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</body>
+</html>
