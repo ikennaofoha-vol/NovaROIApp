@@ -120,7 +120,10 @@
             useEffect(() => {
                 const fetchData = async () => {
                     try {
-                        const response = await fetch(API_URL);
+                        // CRITICAL FIX: Append a timestamp to the URL to bust the browser cache.
+                        // This forces the app to fetch the LIVE data from the sheet every time it loads.
+                        const cacheBusterUrl = `${API_URL}?t=${new Date().getTime()}`;
+                        const response = await fetch(cacheBusterUrl);
                         const data = await response.json();
                         
                         if (data.config && Object.keys(data.config).length > 0) {
