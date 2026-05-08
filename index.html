@@ -52,11 +52,14 @@
     <!-- Font Awesome (Voltera Standard) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-surface-base bg-carbon text-slate-200 antialiased min-h-screen selection:bg-primary-500 selection:text-white">
-    <div id="root"></div>
+<body class="bg-surface-base bg-carbon text-slate-200 antialiased min-h-screen selection:bg-primary-500 selection:text-white flex flex-col">
+    <div id="root" class="flex-grow"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- PASTE NEW DEPLOYMENT URL HERE ---
+        const API_URL = "https://script.google.com/macros/s/AKfycbxVRe0UUX5nqTvPM6BChAu4ImXbhwWXh2jjeT5W3kh-CJtrGg8wf0nW-aLWbaPT-zPI/exec";
 
         // --- DEFAULTS (Fallback if Google Sheet API fails or is empty) ---
         const DEFAULT_CONFIG = {
@@ -94,8 +97,6 @@
             { category: "NOVA", variable: "nova_lead_time", display: "Lead Time per Iteration", value: 0.2, unit: "weeks", tooltip: "~1 business day for in-house printing." }
         ];
 
-        const API_URL = "https://script.google.com/macros/s/AKfycbwq01hXUdTzOzU3Ck-2zy4-7Hj9_TzISmTnRIj1x8KoPacfP8yiA0-i-elJKFtQeX9K/exec";
-
         // --- COMPONENTS ---
 
         const Tooltip = ({ text }) => (
@@ -113,29 +114,46 @@
             const [inputs, setInputs] = useState(DEFAULT_INPUTS);
             const [inputValues, setInputValues] = useState({});
             const [activeTab, setActiveTab] = useState('inputs');
-            const [isLoading, setIsLoading] = useState(true);
+            
+            // SIGNAL TOOL STATES
+            const [sysStatus, setSysStatus] = useState('loading'); // loading, connected, error
+            const [sysErrorMsg, setSysErrorMsg] = useState('');
             const [hasLogged, setHasLogged] = useState(false);
 
-            // Fetch data from Google Sheet
+            // Fetch data from Google Sheet with Signal Logic
             useEffect(() => {
                 const fetchData = async () => {
                     try {
-                        // CRITICAL FIX: Append a timestamp to the URL to bust the browser cache.
-                        // This forces the app to fetch the LIVE data from the sheet every time it loads.
                         const cacheBusterUrl = `${API_URL}?t=${new Date().getTime()}`;
                         const response = await fetch(cacheBusterUrl);
-                        const data = await response.json();
                         
+                        let data;
+                        try {
+                            data = await response.json();
+                        } catch (e) {
+                            throw new Error("Failed to parse database response. Ensure script is deployed correctly.");
+                        }
+
+                        // Check if our new Apps Script logic threw a deliberate error
+                        if (data.status === "error") {
+                            throw new Error(data.message);
+                        }
+                        
+                        // Apply Config overrides if they exist
                         if (data.config && Object.keys(data.config).length > 0) {
                             setConfig(prev => ({...prev, ...data.config}));
                         }
+                        // Apply Input overrides if they exist
                         if (data.inputs && data.inputs.length > 0) {
                             setInputs(data.inputs);
                         }
+
+                        setSysStatus('connected');
+
                     } catch (error) {
-                        console.error("Failed to fetch from Google Sheets, using defaults.", error);
-                    } finally {
-                        setIsLoading(false);
+                        console.error("Database connection failed:", error);
+                        setSysStatus('error');
+                        setSysErrorMsg(error.message || "Unknown database error. Falling back to default configuration.");
                     }
                 };
                 fetchData();
@@ -165,20 +183,20 @@
                 const labor = v('labor_rate');
                 
                 // Outsourced
-                const outsource_nre = 500; // Assumed fixed NRE
-                const outsource_iter_cost = v('out_tooling') + v('out_material') + labor; // Simplified labor
+                const outsource_nre = 500; 
+                const outsource_iter_cost = v('out_tooling') + v('out_material') + labor; 
                 const outsource_cycle_cost = (outsource_iter_cost * iterations) + outsource_nre;
                 const outsource_capex = 0;
 
                 // In-House Partial
                 const inhouse_facility_capex = v('in_facility') + (v('in_space') * v('in_space_cost'));
                 const inhouse_capex = v('in_equipment') + inhouse_facility_capex;
-                const inhouse_iter_cost = v('in_stencil') + 20 + labor; // $20 mat assumption
+                const inhouse_iter_cost = v('in_stencil') + 20 + labor; 
                 const inhouse_cycle_cost = inhouse_iter_cost * iterations;
 
                 // NOVA
                 const nova_capex = v('nova_equipment');
-                const nova_iter_cost = 10 + (labor * 0.5); // $10 mat, half labor time
+                const nova_iter_cost = 10 + (labor * 0.5); 
                 const nova_cycle_cost = nova_iter_cost * iterations;
 
                 // Break Evens
@@ -203,7 +221,7 @@
 
             // --- LOGGING ---
             useEffect(() => {
-                if (activeTab === 'roi' && !hasLogged && !isLoading) {
+                if (activeTab === 'roi' && !hasLogged && sysStatus !== 'loading') {
                     setHasLogged(true);
                     try {
                         fetch(API_URL, {
@@ -220,7 +238,7 @@
                         });
                     } catch(e) { console.error("Logging failed", e); }
                 }
-            }, [activeTab, hasLogged, isLoading, calc]);
+            }, [activeTab, hasLogged, sysStatus, calc]);
 
 
             // --- RENDER HELPERS ---
@@ -449,58 +467,82 @@
                 );
             };
 
-            if (isLoading) {
+            if (sysStatus === 'loading') {
                 return (
                     <div className="min-h-screen flex items-center justify-center">
                         <div className="flex flex-col items-center space-y-4">
                             <i className="fa-solid fa-circle-notch fa-spin text-4xl text-primary-500"></i>
-                            <p className="text-slate-400 font-medium">Loading parameters...</p>
+                            <p className="text-slate-400 font-medium">Fetching live configuration...</p>
                         </div>
                     </div>
                 );
             }
 
             return (
-                <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                    {/* Header */}
-                    <div className="mb-8 text-center md:text-left flex flex-col md:flex-row md:justify-between md:items-end">
-                        <div>
-                            <h1 className="text-3xl font-bold text-white tracking-tight">{config.App_Title}</h1>
-                            <p className="mt-2 text-slate-400">{config.App_Subtitle}</p>
+                <div className="flex flex-col min-h-screen">
+                    {/* Error Banner (Signal Tool) */}
+                    {sysStatus === 'error' && (
+                        <div className="bg-status-danger/10 border-b border-status-danger/30 text-status-danger px-4 py-3 flex items-start sm:items-center">
+                            <i className="fa-solid fa-triangle-exclamation mt-1 sm:mt-0 mr-3 text-lg"></i>
+                            <div className="flex-1 text-sm">
+                                <span className="font-bold block sm:inline">Database Sync Error: </span> 
+                                {sysErrorMsg}
+                                <span className="block mt-1 sm:mt-0 sm:inline sm:ml-2 text-slate-400 italic">The app is currently running on safe default settings.</span>
+                            </div>
                         </div>
-                        <div className="mt-6 md:mt-0">
-                            {/* Inverted image to show white logo on dark background */}
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Voltera_Logo.png" alt="Voltera Logo" className="h-7 opacity-70 invert" onError={(e) => e.target.style.display='none'} />
+                    )}
+
+                    <div className="max-w-6xl w-full mx-auto py-8 px-4 sm:px-6 lg:px-8 flex-grow">
+                        {/* Header */}
+                        <div className="mb-8 text-center md:text-left flex flex-col md:flex-row md:justify-between md:items-end">
+                            <div>
+                                <h1 className="text-3xl font-bold text-white tracking-tight">{config.App_Title}</h1>
+                                <p className="mt-2 text-slate-400">{config.App_Subtitle}</p>
+                            </div>
+                            <div className="mt-6 md:mt-0">
+                                {/* Inverted image to show white logo on dark background */}
+                                <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Voltera_Logo.png" alt="Voltera Logo" className="h-7 opacity-70 invert" onError={(e) => e.target.style.display='none'} />
+                            </div>
                         </div>
+
+                        {/* Navigation Tabs */}
+                        <div className="border-b border-slate-700/70 mb-6">
+                            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                                <button
+                                    onClick={() => setActiveTab('inputs')}
+                                    className={`${activeTab === 'inputs' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
+                                >
+                                    <i className="fa-solid fa-sliders mr-2"></i>
+                                    {config.Tab1_Name}
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('roi')}
+                                    className={`${activeTab === 'roi' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
+                                >
+                                    <i className="fa-solid fa-chart-line mr-2"></i>
+                                    {config.Tab2_Name}
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Main Content Area */}
+                        <main className="min-h-[500px]">
+                            {activeTab === 'inputs' ? renderInputs() : renderROI()}
+                        </main>
                     </div>
 
-                    {/* Navigation Tabs */}
-                    <div className="border-b border-slate-700/70 mb-6">
-                        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                            <button
-                                onClick={() => setActiveTab('inputs')}
-                                className={`${activeTab === 'inputs' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
-                            >
-                                <i className="fa-solid fa-sliders mr-2"></i>
-                                {config.Tab1_Name}
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('roi')}
-                                className={`${activeTab === 'roi' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
-                            >
-                                <i className="fa-solid fa-chart-line mr-2"></i>
-                                {config.Tab2_Name}
-                            </button>
-                        </nav>
-                    </div>
-
-                    {/* Main Content Area */}
-                    <main className="min-h-[600px]">
-                        {activeTab === 'inputs' ? renderInputs() : renderROI()}
-                    </main>
-                    
-                    <footer className="mt-12 text-center text-sm text-slate-500 pb-8">
-                        &copy; {new Date().getFullYear()} Voltera. Internal Sales Tool.
+                    {/* Footer Status Bar (Signal Tool) */}
+                    <footer className="bg-surface-panel border-t border-slate-700/50 py-4 px-6 flex justify-between items-center text-xs">
+                        <div className="text-slate-500">
+                            &copy; {new Date().getFullYear()} Voltera. Internal Sales Tool.
+                        </div>
+                        <div className="flex items-center space-x-2 bg-surface-base px-3 py-1.5 rounded-full border border-slate-700/50 shadow-inner">
+                            {sysStatus === 'connected' ? (
+                                <><div className="w-2 h-2 rounded-full bg-status-success shadow-[0_0_8px_rgba(16,185,129,0.6)]"></div><span className="text-slate-300 font-medium">Database Connected</span></>
+                            ) : (
+                                <><div className="w-2 h-2 rounded-full bg-status-danger shadow-[0_0_8px_rgba(255,48,51,0.6)]"></div><span className="text-slate-300 font-medium">Offline (Defaults Active)</span></>
+                            )}
+                        </div>
                     </footer>
                 </div>
             );
