@@ -13,16 +13,21 @@
             theme: {
                 extend: {
                     colors: {
-                        voltera: {
-                            50: '#f0fdfa',
-                            100: '#ccfbf1',
-                            500: '#14b8a6', // Primary NOVA Teal
-                            600: '#0d9488',
-                            900: '#134e4a',
+                        primary: {
+                            400: '#60a5fa',
+                            500: '#3b82f6', // Voltera Primary Action Blue
+                            600: '#2563eb',
+                            900: '#1e3a8a',
+                        },
+                        status: {
+                            success: '#10b981', // Voltera Green
+                            warning: '#FFB700', // Voltera Yellow
+                            danger: '#FF3033',  // Voltera Red
                         },
                         surface: {
-                            light: '#ffffff',
-                            dark: '#0f172a' // Slate 900
+                            base: '#121418', // Rich Black baseline
+                            panel: '#1A1D24', // Elevated card
+                            raised: '#232730' // Hover/Highlight state
                         }
                     },
                     fontFamily: {
@@ -44,10 +49,10 @@
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Font Awesome (Voltera Standard) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
-<body class="bg-slate-50 text-slate-900 antialiased min-h-screen">
+<body class="bg-surface-base bg-carbon text-slate-200 antialiased min-h-screen selection:bg-primary-500 selection:text-white">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -87,10 +92,10 @@
 
         const Tooltip = ({ text }) => (
             <div className="group relative inline-flex items-center justify-center ml-2">
-                <i className="ph ph-info text-slate-400 hover:text-slate-600 cursor-help transition-colors"></i>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10 shadow-lg text-center">
+                <i className="fa-solid fa-circle-info text-slate-500 hover:text-slate-300 cursor-help transition-colors duration-200 text-sm"></i>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 p-3 bg-surface-raised border border-slate-700 text-slate-200 text-xs rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-20 text-center font-normal tracking-wide">
                     {text}
-                    <svg className="absolute text-slate-800 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255" xmlSpace="preserve"><polygon className="fill-current" points="0,0 127.5,127.5 255,0"/></svg>
+                    <div className="absolute w-3 h-3 bg-surface-raised border-b border-r border-slate-700 transform rotate-45 left-1/2 -translate-x-1/2 -bottom-1.5"></div>
                 </div>
             </div>
         );
@@ -192,7 +197,7 @@
                     try {
                         fetch(API_URL, {
                             method: 'POST',
-                            mode: 'no-cors', // Required for simple POST to Apps Script without preflight issues
+                            mode: 'no-cors', 
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 session_id: "Sales_App_" + Math.floor(Math.random()*10000),
@@ -222,27 +227,27 @@
                             if (catInputs.length === 0) return null;
                             
                             return (
-                                <div key={cat} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 font-semibold text-slate-700 flex items-center">
-                                        {cat === "NOVA" ? <i className="ph-fill ph-sparkle text-voltera-500 mr-2"></i> : null}
+                                <div key={cat} className="bg-surface-panel rounded-lg shadow-lg border border-slate-700/50 overflow-hidden transition-all duration-300 ease-in-out hover:border-slate-600">
+                                    <div className="bg-surface-raised/50 px-5 py-3 border-b border-slate-700/50 font-semibold text-slate-200 flex items-center">
+                                        {cat === "NOVA" ? <i className="fa-solid fa-microchip text-primary-500 mr-2"></i> : null}
                                         {cat} Parameters
                                     </div>
                                     <div className="p-5 space-y-4">
                                         {catInputs.map(inp => (
                                             <div key={inp.variable} className="flex flex-col">
-                                                <label className="text-sm font-medium text-slate-600 flex items-center mb-1">
+                                                <label className="text-sm font-medium text-slate-300 flex items-center mb-1.5">
                                                     {inp.display}
                                                     {inp.tooltip && <Tooltip text={inp.tooltip} />}
                                                 </label>
-                                                <div className="relative rounded-md shadow-sm">
+                                                <div className="relative rounded shadow-sm">
                                                     <input 
                                                         type="number" 
                                                         value={inputValues[inp.variable] || ''}
                                                         onChange={(e) => handleInputChange(inp.variable, e.target.value)}
-                                                        className="form-input block w-full rounded-md border-slate-300 focus:border-voltera-500 focus:ring-voltera-500 sm:text-sm px-3 py-2 border outline-none transition-shadow"
+                                                        className="form-input block w-full rounded border border-slate-700 bg-surface-base text-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500 sm:text-sm px-3 py-2 outline-none transition-shadow duration-200"
                                                     />
                                                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                                                        <span className="text-slate-400 sm:text-sm">{inp.unit}</span>
+                                                        <span className="text-slate-500 sm:text-sm">{inp.unit}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -265,6 +270,8 @@
                     }
 
                     const ctx = chartRef.current.getContext('2d');
+                    
+                    // Chart configured for Dark Mode
                     chartInstance.current = new Chart(ctx, {
                         type: 'bar',
                         data: {
@@ -273,19 +280,19 @@
                                 {
                                     label: 'Cycle Cost (OpEx)',
                                     data: [calc.outsource_cycle_cost, calc.inhouse_cycle_cost, calc.nova_cycle_cost],
-                                    backgroundColor: ['#94a3b8', '#64748b', '#14b8a6'],
+                                    backgroundColor: ['#475569', '#64748b', '#3b82f6'], // Slate 600, Slate 500, Primary 500
                                     borderRadius: 4,
                                 },
                                 {
                                     label: 'Equipment (CapEx)',
                                     data: [calc.outsource_capex, calc.inhouse_capex - calc.inhouse_facility_capex, calc.nova_capex],
-                                    backgroundColor: ['#e2e8f0', '#cbd5e1', '#ccfbf1'],
+                                    backgroundColor: ['#1e293b', '#334155', '#1e3a8a'], // Slate 800, Slate 700, Primary 900
                                     borderRadius: 4,
                                 },
                                 {
                                     label: 'Facility Upgrades (CapEx)',
                                     data: [0, calc.inhouse_facility_capex, 0],
-                                    backgroundColor: ['#f8fafc', '#f1f5f9', '#f0fdfa'],
+                                    backgroundColor: ['#0f172a', '#1e293b', '#172554'], // Slate 900, Slate 800, Primary 950
                                     borderRadius: 4,
                                 }
                             ]
@@ -294,16 +301,34 @@
                             responsive: true,
                             maintainAspectRatio: false,
                             scales: {
-                                x: { stacked: true, grid: { display: false } },
+                                x: { 
+                                    stacked: true, 
+                                    grid: { display: false },
+                                    ticks: { color: '#cbd5e1', font: { family: 'Inter' } } 
+                                },
                                 y: { 
                                     stacked: true, 
                                     border: { display: false },
-                                    ticks: { callback: (value) => '$' + value.toLocaleString() }
+                                    grid: { color: '#334155' }, // Dark grid lines
+                                    ticks: { 
+                                        color: '#94a3b8', 
+                                        font: { family: 'Inter' },
+                                        callback: (value) => '$' + value.toLocaleString() 
+                                    }
                                 }
                             },
                             plugins: {
-                                legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } },
+                                legend: { 
+                                    position: 'bottom', 
+                                    labels: { color: '#e2e8f0', usePointStyle: true, boxWidth: 8, font: { family: 'Inter' } } 
+                                },
                                 tooltip: {
+                                    backgroundColor: '#1A1D24',
+                                    titleColor: '#f8fafc',
+                                    bodyColor: '#cbd5e1',
+                                    borderColor: '#334155',
+                                    borderWidth: 1,
+                                    padding: 12,
                                     callbacks: {
                                         label: (context) => context.dataset.label + ': ' + formatCurrency(context.raw)
                                     }
@@ -324,10 +349,10 @@
                         {/* Top Hero Metrics */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Payback Hero */}
-                            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center items-center text-center relative overflow-hidden">
-                                <div className="absolute top-0 left-0 w-full h-1 bg-voltera-500"></div>
-                                <h3 className="text-slate-500 font-medium text-sm uppercase tracking-wider mb-2">{config.Feature_Payback}</h3>
-                                <div className="text-5xl font-bold text-slate-800 mb-2">
+                            <div className="bg-surface-panel rounded-lg shadow-lg border border-slate-700/50 p-6 flex flex-col justify-center items-center text-center relative overflow-hidden transition-transform duration-300 hover:-translate-y-1">
+                                <div className="absolute top-0 left-0 w-full h-1 bg-primary-500"></div>
+                                <h3 className="text-slate-400 font-medium text-sm uppercase tracking-wider mb-2">{config.Feature_Payback}</h3>
+                                <div className="text-5xl font-bold text-white mb-2 tracking-tight">
                                     {formatNumber(calc.payback_months)} <span className="text-2xl text-slate-400 font-normal">months</span>
                                 </div>
                                 <p className="text-sm text-slate-500 max-w-xs">
@@ -336,10 +361,10 @@
                             </div>
 
                             {/* Value Hero */}
-                            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl shadow-lg border border-slate-700 p-6 flex flex-col justify-center items-center text-center text-white">
-                                <i className="ph ph-rocket-launch text-3xl text-voltera-500 mb-2"></i>
+                            <div className="bg-gradient-to-br from-primary-900/40 to-surface-panel rounded-lg shadow-lg border border-primary-500/30 p-6 flex flex-col justify-center items-center text-center text-white relative overflow-hidden transition-transform duration-300 hover:-translate-y-1">
+                                <i className="fa-solid fa-rocket text-3xl text-primary-400 mb-3 opacity-90"></i>
                                 <h3 className="text-slate-300 font-medium text-sm uppercase tracking-wider mb-2">{config.Feature_Speed}</h3>
-                                <div className="text-4xl font-bold text-emerald-400 mb-2 drop-shadow-md">
+                                <div className="text-4xl font-bold text-status-success mb-2 drop-shadow-md tracking-tight">
                                     +{formatCurrency(calc.added_revenue)}
                                 </div>
                                 <p className="text-sm text-slate-400 max-w-xs">
@@ -349,49 +374,48 @@
                         </div>
 
                         {/* Chart Area */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                        <div className="bg-surface-panel rounded-lg shadow-lg border border-slate-700/50 p-6">
                             <div className="flex justify-between items-end mb-6">
                                 <div>
-                                    <h3 className="text-lg font-semibold text-slate-800">Cost Structure Comparison</h3>
-                                    <p className="text-sm text-slate-500">CapEx vs OpEx over a single {inputValues.iterations_per_cycle}-iteration cycle.</p>
+                                    <h3 className="text-lg font-semibold text-white">Cost Structure Comparison</h3>
+                                    <p className="text-sm text-slate-400 mt-1">CapEx vs OpEx over a single {inputValues.iterations_per_cycle}-iteration cycle.</p>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-xs text-slate-400 uppercase tracking-wide">NOVA Cycle Savings</div>
-                                    <div className="text-xl font-bold text-voltera-600">{formatCurrency(calc.outsource_cycle_cost - calc.nova_cycle_cost)}</div>
+                                    <div className="text-xs text-slate-500 uppercase tracking-wide">NOVA Cycle Savings</div>
+                                    <div className="text-xl font-bold text-primary-400">{formatCurrency(calc.outsource_cycle_cost - calc.nova_cycle_cost)}</div>
                                 </div>
                             </div>
                             <ChartComponent calc={calc} />
                         </div>
 
                         {/* Sensitivity Matrix */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                                <h3 className="text-lg font-semibold text-slate-800">Sensitivity Analysis: Break-Even Cycles</h3>
-                                <p className="text-sm text-slate-500">How many cycles to pay off NOVA if assumptions change?</p>
+                        <div className="bg-surface-panel rounded-lg shadow-lg border border-slate-700/50 overflow-hidden">
+                            <div className="bg-surface-raised/50 px-6 py-4 border-b border-slate-700/50">
+                                <h3 className="text-lg font-semibold text-white">Sensitivity Analysis: Break-Even Cycles</h3>
+                                <p className="text-sm text-slate-400 mt-1">How many cycles to pay off NOVA if assumptions change?</p>
                             </div>
                             <div className="overflow-x-auto p-6">
-                                <table className="w-full text-sm text-left">
+                                <table className="w-full text-sm text-left border-collapse">
                                     <thead>
                                         <tr>
-                                            <th className="pb-3 text-slate-500 font-medium">Outsource Iteration Cost &rarr;<br/>Iterations per Cycle &darr;</th>
-                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$100 / iter</th>
-                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$250 / iter</th>
-                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200 text-voltera-600 bg-voltera-50 rounded-t-md">Current (~${Math.round((calc.outsource_cycle_cost-500)/inputValues.iterations_per_cycle)})</th>
-                                            <th className="pb-3 text-slate-700 font-semibold text-center border-b-2 border-slate-200">$500 / iter</th>
+                                            <th className="pb-3 text-slate-400 font-medium">Outsource Iteration Cost &rarr;<br/>Iterations per Cycle &darr;</th>
+                                            <th className="pb-3 text-slate-300 font-semibold text-center border-b-2 border-slate-600">$100 / iter</th>
+                                            <th className="pb-3 text-slate-300 font-semibold text-center border-b-2 border-slate-600">$250 / iter</th>
+                                            <th className="pb-3 text-primary-400 font-semibold text-center border-b-2 border-primary-500 bg-primary-900/10 rounded-t-md">Current (~${Math.round((calc.outsource_cycle_cost-500)/inputValues.iterations_per_cycle)})</th>
+                                            <th className="pb-3 text-slate-300 font-semibold text-center border-b-2 border-slate-600">$500 / iter</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {[3, 5, 10, 15].map((iters, idx) => (
-                                            <tr key={iters} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                                                <td className="py-3 font-medium text-slate-700">{iters} iterations</td>
+                                            <tr key={iters} className="border-b border-slate-700/50 last:border-0 hover:bg-surface-raised transition-colors duration-150">
+                                                <td className="py-3 font-medium text-slate-300">{iters} iterations</td>
                                                 {[100, 250, (calc.outsource_cycle_cost-500)/inputValues.iterations_per_cycle, 500].map((cost, i) => {
-                                                    // Local calc for matrix
                                                     const outCost = (cost * iters) + 500; 
-                                                    const novCost = 15 * iters; // fixed assume
+                                                    const novCost = 15 * iters; // fixed assumption
                                                     const be = calc.nova_capex / Math.max(outCost - novCost, 1);
                                                     const isCurrent = i === 2;
                                                     return (
-                                                        <td key={i} className={`py-3 text-center ${isCurrent ? 'bg-voltera-50 font-bold text-voltera-700' : 'text-slate-600'}`}>
+                                                        <td key={i} className={`py-3 text-center ${isCurrent ? 'bg-primary-900/10 font-bold text-primary-400' : 'text-slate-400'}`}>
                                                             {formatNumber(be)} cycles
                                                         </td>
                                                     );
@@ -410,41 +434,42 @@
                 return (
                     <div className="min-h-screen flex items-center justify-center">
                         <div className="flex flex-col items-center space-y-4">
-                            <i className="ph ph-spinner-gap animate-spin text-4xl text-voltera-500"></i>
-                            <p className="text-slate-500 font-medium">Loading parameters...</p>
+                            <i className="fa-solid fa-circle-notch fa-spin text-4xl text-primary-500"></i>
+                            <p className="text-slate-400 font-medium">Loading parameters...</p>
                         </div>
                     </div>
                 );
             }
 
             return (
-                <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                <div className="max-w-6xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                     {/* Header */}
                     <div className="mb-8 text-center md:text-left flex flex-col md:flex-row md:justify-between md:items-end">
                         <div>
-                            <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{config.App_Title}</h1>
-                            <p className="mt-2 text-slate-500">{config.App_Subtitle}</p>
+                            <h1 className="text-3xl font-bold text-white tracking-tight">{config.App_Title}</h1>
+                            <p className="mt-2 text-slate-400">{config.App_Subtitle}</p>
                         </div>
-                        <div className="mt-4 md:mt-0">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Voltera_Logo.png" alt="Voltera Logo" className="h-8 opacity-80 grayscale mix-blend-multiply" onError={(e) => e.target.style.display='none'} />
+                        <div className="mt-6 md:mt-0">
+                            {/* Inverted image to show white logo on dark background */}
+                            <img src="https://upload.wikimedia.org/wikipedia/commons/c/ca/Voltera_Logo.png" alt="Voltera Logo" className="h-7 opacity-70 invert" onError={(e) => e.target.style.display='none'} />
                         </div>
                     </div>
 
                     {/* Navigation Tabs */}
-                    <div className="border-b border-slate-200 mb-6">
+                    <div className="border-b border-slate-700/70 mb-6">
                         <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                             <button
                                 onClick={() => setActiveTab('inputs')}
-                                className={`${activeTab === 'inputs' ? 'border-voltera-500 text-voltera-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+                                className={`${activeTab === 'inputs' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
                             >
-                                <i className="ph ph-sliders text-lg mr-2"></i>
+                                <i className="fa-solid fa-sliders mr-2"></i>
                                 {config.Tab1_Name}
                             </button>
                             <button
                                 onClick={() => setActiveTab('roi')}
-                                className={`${activeTab === 'roi' ? 'border-voltera-500 text-voltera-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center transition-colors`}
+                                className={`${activeTab === 'roi' ? 'border-primary-500 text-primary-400' : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'} whitespace-nowrap py-4 px-2 border-b-2 font-medium text-sm flex items-center transition-all duration-300 ease-in-out`}
                             >
-                                <i className="ph ph-chart-line-up text-lg mr-2"></i>
+                                <i className="fa-solid fa-chart-line mr-2"></i>
                                 {config.Tab2_Name}
                             </button>
                         </nav>
@@ -455,7 +480,7 @@
                         {activeTab === 'inputs' ? renderInputs() : renderROI()}
                     </main>
                     
-                    <footer className="mt-12 text-center text-sm text-slate-400 pb-8">
+                    <footer className="mt-12 text-center text-sm text-slate-500 pb-8">
                         &copy; {new Date().getFullYear()} Voltera. Internal Sales Tool.
                     </footer>
                 </div>
@@ -476,7 +501,12 @@
             animation: fadeIn 0.4s ease-out forwards;
         }
         
-        /* Hide number input arrows */
+        /* Subtle Carbon Fibre SVG background Pattern */
+        .bg-carbon {
+            background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' viewBox='0 0 8 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.02' fill-rule='evenodd'%3E%3Cpath d='M0 0h4v4H0V0zm4 4h4v4H4V4z'/%3E%3C/g%3E%3C/svg%3E");
+        }
+
+        /* Hide number input arrows cleanly */
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button {
             -webkit-appearance: none;
